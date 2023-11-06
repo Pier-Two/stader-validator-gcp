@@ -1,0 +1,5 @@
+/.DS_Store
+/.history
+.terraform
+.terraform.lock.hcl
+terraform.tfstate.backup

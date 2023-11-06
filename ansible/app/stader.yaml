@@ -1,0 +1,243 @@
+---
+- name: "Stader node setup"
+  hosts: all
+  become: yes
+
+  vars:
+    externalExecution_httpUrl: "{{ app.vars.externalExecution_httpUrl}}"
+    externalExecution_wsUrl: "{{ app.vars.externalExecution_wsUrl}}"
+    externalLighthouse_httpUrl: "{{ app.vars.externalLighthouse_httpUrl}}"
+    fallbackNormal_ecHttpUrl: "{{ app.vars.fallbackNormal_ecHttpUrl}}"
+    fallbackNormal_ccHttpUrl: "{{ app.vars.fallbackNormal_ccHttpUrl}}"
+    stader_data_dir: "{{ app.vars.stader_data_dir }}"
+    stader_validator_NETWORK: "{{ app.vars.stader_validator_NETWORK }}"
+    stader_validator_GRAFFITI: "{{ app.vars.stader_validator_GRAFFITI }}"
+    stader_validator_lh_version: "{{ app.vars.stader_validator_lh_version }}"
+    stader_mevboost_RELAYS: "{{ app.vars.stader_mevboost_RELAYS }}"
+
+  tasks:
+
+    # stader user with sudo permissions is required by stader-cli
+    - name: Create 'stader' user
+      user:
+        name: stader
+        shell: /bin/bash
+
+    - name: Add 'stader' to sudo and docker groups
+      user:
+        name: stader
+        groups: sudo,docker
+        append: yes
+
+    - name: Add 'stader' to sudoers file
+      lineinfile:
+        path: /etc/sudoers
+        line: 'stader ALL=(ALL) NOPASSWD: ALL'
+
+    - name: Create directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: stader
+      loop:
+        - { path: "/home/stader/bin" }
+        - { path: "{{ stader_data_dir }}" }
+
+    - name: Download and set permissions for 'stader-cli'
+      get_url:
+        url: https://staderlabs.com/eth/releases/stader-node-build/permissionless/{{ app.version }}/stader-cli-linux-amd64
+        dest: /home/stader/bin/stader-cli
+        mode: '0755'
+        owner: stader
+
+    # "stader-cli service install" create diretories with some data under {{ stader_data_dir }}/
+    # Check if the data directory exists to make sure we need to run install 
+    - stat:
+        path: "{{ stader_data_dir }}/data"
+      register: data_dir_stat
+
+    # Ansible doesn't allow changing users with become if you are switching from non-root user to another non-root user
+    - name: Install 'stader-cli' service
+      shell: |
+        sudo su - stader -c "./bin/stader-cli --config-path {{ stader_data_dir }} service install --path {{ stader_data_dir }} -y"
+      args:
+        chdir: /home/stader
+      register: cmd_output
+      when: not data_dir_stat.stat.exists
+
+    # Introducing additional step to check that data directory was created to verify previous command execution
+    - stat:
+        path: "{{ stader_data_dir }}/data"
+      register: state_result
+
+    - fail:
+        msg: "Command was not successful"
+      when: not state_result.stat.exists 
+  
+    - name: Template and copy user-settings.yml to remote host
+      template:
+        src: templates/user-settings.yml.j2
+        dest: "{{ stader_data_dir }}/user-settings.yml"
+
+    # alias to avoid providing config path every time
+    # Remember to switch to stader using before running stader-cli command
+    # sudo su - stader
+    - name: Add alias to .bashrc
+      lineinfile:
+        path: "/home/stader/.bashrc"
+        line: "alias stader-cli='~/bin/stader-cli --config-path {{ stader_data_dir }}'"
+        state: present
+        create: yes
+
+    - name: Get info about Stader docker containers
+      docker_container_info:
+        name: "{{ item }}"
+      register: container_info
+      loop:
+        - stader_validator
+        - stader_guardian
+        - stader_mev-boost
+        - stader_api
+        - stader_node
+
+    - name: Stop Stader docker containers
+      docker_container:
+        name: "{{ item.item }}"
+        state: stopped
+      loop: "{{ container_info.results }}"
+      when: item.exists
+
+    - name: Remove Stader docker containers
+      docker_container:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - stader_validator
+        - stader_guardian
+        - stader_mev-boost
+        - stader_api
+        - stader_node
+
+    - name: Ensure Stader Docker network exists
+      docker_network:
+        name: net
+        state: present
+
+    - name: Stader node
+      docker_container:
+        name: stader_node
+        image: "staderlabs/stader-permissionless:{{ app.version }}"
+        command: "node"
+        restart_policy: unless-stopped
+        volumes:
+          - "{{ stader_data_dir }}:/.stader:rw"
+          - "{{ stader_data_dir }}/data:/.stader/data:rw"
+          - "/var/run/docker.sock:/var/run/docker.sock:rw"
+        ports:
+          - "0.0.0.0:9101:9101"
+        networks:
+          - name: net
+        log_driver: json-file
+        log_options:
+          max-size: 100m
+          max-file: "3"
+
+    - name: Stader API
+      docker_container:
+        name: stader_api
+        image: "staderlabs/stader-permissionless:{{ app.version }}"
+        entrypoint: "/bin/sleep"
+        command: "infinity"
+        restart_policy: unless-stopped
+        volumes:
+          - "{{ stader_data_dir }}:/.stader:rw"
+          - "{{ stader_data_dir }}/data:/.stader/data:rw"
+          - "/var/run/docker.sock:/var/run/docker.sock:rw"
+        networks:
+          - name: net
+        log_driver: json-file
+        log_options:
+          max-size: 100m
+          max-file: "3"
+
+    - name: Stader MEV
+      docker_container:
+        name: stader_mev-boost
+        image: "flashbots/mev-boost:1.6"
+        entrypoint: "sh"
+        command: "/setup/start-mev-boost.sh"
+        restart_policy: unless-stopped
+        volumes:
+          - "{{ stader_data_dir }}/scripts:/setup:ro"
+        networks:
+          - name: net
+        env:
+          NETWORK: "{{ app.vars.stader_validator_NETWORK }}"
+          MEV_BOOST_PORT: "18550"
+          MEV_BOOST_RELAYS: "{{ stader_mevboost_RELAYS }}"
+        log_driver: json-file
+        log_options:
+          max-size: 100m
+          max-file: "3"
+
+    - name: Stader guardian
+      docker_container:
+        name: stader_guardian
+        image: "staderlabs/stader-permissionless:{{ app.version }}"
+        command: "-m 0.0.0.0 -r 9104 guardian"
+        restart_policy: unless-stopped
+        volumes:
+          - "{{ stader_data_dir }}:/.stader:rw"
+          - "{{ stader_data_dir }}/data:/.stader/data:rw"
+        ports:
+          - "0.0.0.0:9104:9104"
+        networks:
+          - name: net
+        log_driver: json-file
+        log_options:
+          max-size: 100m
+          max-file: "3"
+
+    - name: Stader validator
+      docker_container:
+        name: stader_validator
+        image: "sigp/lighthouse:{{ stader_validator_lh_version }}"
+#        network_mode: host
+        entrypoint: "sh"
+        command: "/setup/start-vc.sh"
+        restart_policy: unless-stopped
+        volumes:
+          - "{{ stader_data_dir }}/addons:/addons:rw"
+          - "{{ stader_data_dir }}/scripts:/setup:ro"
+          - "{{ stader_data_dir }}/data/validators:/validators:rw"
+          - "{{ stader_data_dir }}/zhejiang:/zhejiang:rw"
+        networks:
+          - name: net
+        env:
+          NETWORK: "{{ app.vars.stader_validator_NETWORK }}"
+          CC_RPC_ENDPOINT: ""
+          FALLBACK_CC_API_ENDPOINT: "{{ fallbackNormal_ccHttpUrl }}"
+          FALLBACK_CC_RPC_ENDPOINT: ""
+          ENABLE_METRICS: "false"
+          MEV_BOOST_URL: "http://mev-boost:18550"
+          BITFLY_NODE_METRICS_ENDPOINT: ""
+          STADER_VERSION: "{{ app.version }}"
+          NODE_FEE_RECIPIENT: ""
+          DOPPELGANGER_DETECTION: "true"
+          VC_ADDITIONAL_FLAGS: ""
+          FEE_RECIPIENT_FILE: "stader-fee-recipient.txt"
+          GRAFFITI: "{{ stader_validator_GRAFFITI }}"
+          ENABLE_BITFLY_NODE_METRICS: "false"
+          BITFLY_NODE_METRICS_MACHINE_NAME: ""
+          CC_CLIENT: "lighthouse"
+          CC_API_ENDPOINT: "{{ externalLighthouse_httpUrl }}"
+          ENABLE_MEV_BOOST: "true"
+          VC_METRICS_PORT: "9101"
+          ADDON_GWW_ENABLED: ""
+          BITFLY_NODE_METRICS_SECRET: ""
+          EC_CLIENT: "X"
+          CUSTOM_GRAFFITI: "{{ stader_validator_GRAFFITI }}"
+        log_driver: json-file
+        log_options:
+          max-size: 100m
+          max-file: "3"

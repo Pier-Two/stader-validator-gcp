@@ -1,0 +1,176 @@
+besu:
+  additionalFlags: ""
+  containerTag: hyperledger/besu:23.7.1
+  jvmHeapSize: "0"
+  maxBackLayers: "512"
+  maxPeers: "25"
+bitflyNodeMetrics:
+  bitflyEndpoint: https://beaconcha.in/api/v1/client/metrics
+  bitflyMachineName: Stadernode
+  bitflySecret: ""
+consensusCommon:
+  apiPort: "5052"
+  checkpointSyncUrl: ""
+  doppelgangerDetection: "true"
+  graffiti: StaderLabs
+  openApiPort: "false"
+  p2pPort: "9001"
+executionCommon:
+  enginePort: "8551"
+  ethstatsLabel: ""
+  ethstatsLogin: ""
+  httpPort: "8545"
+  openRpcPorts: "false"
+  p2pPort: "30303"
+  wsPort: "8546"
+exporter:
+  additionalFlags: ""
+  containerTag: prom/node-exporter:v1.6.0
+  enableRootFs: "false"
+externalExecution:
+  httpUrl: {{ externalExecution_httpUrl }}
+  wsUrl: {{ externalExecution_wsUrl }}
+externalLighthouse:
+  additionalVcFlags: ""
+  containerTag: sigp/lighthouse:{{ stader_validator_lh_version }}
+  doppelgangerDetection: "true"
+  graffiti: StaderLabs
+  httpUrl: {{ externalLighthouse_httpUrl }}
+externalLodestar:
+  additionalVcFlags: ""
+  containerTag: chainsafe/lodestar:v1.10.0
+  doppelgangerDetection: "true"
+  graffiti: StaderLabs
+  httpUrl: ""
+externalNimbus:
+  additionalVcFlags: ""
+  containerTag: statusim/nimbus-validator-client:multiarch-v23.8.0
+  doppelgangerDetection: "true"
+  graffiti: StaderLabs
+  httpUrl: ""
+externalPrysm:
+  additionalVcFlags: ""
+  containerTag: nethermindeth/prysm-validator:v4.0.7
+  doppelgangerDetection: "true"
+  graffiti: StaderLabs
+  httpUrl: ""
+  jsonRpcUrl: ""
+externalTeku:
+  additionalVcFlags: ""
+  containerTag: consensys/teku:23.8.0
+  graffiti: StaderLabs
+  httpUrl: ""
+fallbackNormal:
+  ccHttpUrl: {{ fallbackNormal_ecHttpUrl }}
+  ecHttpUrl: {{ fallbackNormal_ccHttpUrl }}
+fallbackPrysm:
+  ccHttpUrl: ""
+  ecHttpUrl: ""
+  jsonRpcUrl: ""
+geth:
+  additionalFlags: ""
+  cache: "4096"
+  containerTag: ethereum/client-go:v1.12.2
+  maxPeers: "50"
+  usePebble: "false"
+grafana:
+  containerTag: grafana/grafana:9.4.13
+  port: "3100"
+lighthouse:
+  additionalBnFlags: ""
+  additionalVcFlags: ""
+  containerTag: sigp/lighthouse:{{ stader_validator_lh_version }}
+  maxPeers: "80"
+lodestar:
+  additionalBnFlags: ""
+  additionalVcFlags: ""
+  containerTag: chainsafe/lodestar:v1.10.0
+  maxPeers: "50"
+mevBoost:
+  additionalFlags: ""
+  aestusEnabled: "false"
+  bloxRouteMaxProfitEnabled: "false"
+  bloxRouteRegulatedEnabled: "false"
+  containerTag: flashbots/mev-boost:1.6
+  edenEnabled: "false"
+  enableRegulatedAllMev: "false"
+  enableRegulatedNoSandwich: "false"
+  enableUnregulatedAllMev: "true"
+  enableUnregulatedNoSandwich: "false"
+  externalUrl: ""
+  flashbotsEnabled: "false"
+  mode: local
+  openRpcPort: "false"
+  port: "18550"
+  selectionMode: profile
+  ultrasoundEnabled: "false"
+native:
+  ccHttpUrl: ""
+  consensusClient: nimbus
+  ecHttpUrl: ""
+  validatorRestartCommand: /blockchain/stader/restart-vc.sh
+  validatorStopCommand: /blockchain/stader/stop-validator.sh
+nethermind:
+  additionalFlags: ""
+  additionalModules: ""
+  additionalUrls: ""
+  cache: "1024"
+  containerTag: nethermind/nethermind:1.20.1
+  maxPeers: "50"
+  pruneMemSize: "1024"
+nimbus:
+  additionalBnFlags: ""
+  additionalVcFlags: ""
+  bnContainerTag: statusim/nimbus-eth2:multiarch-v23.8.0
+  containerTag: statusim/nimbus-validator-client:multiarch-v23.8.0
+  maxPeers: "160"
+  pruningMode: archive
+prometheus:
+  additionalFlags: ""
+  containerTag: prom/prometheus:v2.45.0
+  openPort: "false"
+  port: "9091"
+prysm:
+  additionalBnFlags: ""
+  additionalVcFlags: ""
+  bnContainerTag: nethermindeth/prysm-beacon-chain:v4.0.7
+  maxPeers: "45"
+  openRpcPort: "false"
+  rpcPort: "5053"
+  vcContainerTag: nethermindeth/prysm-validator:v4.0.7
+root:
+  bnMetricsPort: "9100"
+  consensusClient: nimbus
+  consensusClientMode: external
+  ecMetricsPort: "9105"
+  enableBitflyNodeMetrics: "false"
+  enableGuardianMetrics: "false"
+  enableMetrics: "true"
+  enableMevBoost: "true"
+  executionClient: geth
+  executionClientMode: external
+  exporterMetricsPort: "9103"
+  exposeGuardianPort: "true"
+  externalConsensusClient: lighthouse
+  isNative: "false"
+  nodeMetricsPort: "9104"
+  reconnectDelay: 60s
+  sdDir: /blockchain/stader
+  useFallbackClients: "false"
+  vcMetricsPort: "9101"
+  version: {{ app.version }}
+stadernode:
+  archiveECUrl: ""
+  dataPath: /blockchain/stader/data
+  manualMaxFee: "0"
+  network: {{ stader_validator_NETWORK }}
+  priorityFee: "2"
+  projectName: stader
+  txFeeCap: "1"
+teku:
+  additionalBnFlags: ""
+  additionalVcFlags: ""
+  archiveMode: "false"
+  containerTag: consensys/teku:23.8.0
+  jvmHeapSize: "0"
+  maxPeers: "100"
